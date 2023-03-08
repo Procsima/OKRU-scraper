@@ -18,9 +18,8 @@ class OkruSpider(scrapy.Spider):
 
         # response.css('span.invisible').xpath('@st.markerb').extract_first()
 
-        markerB = response.css('span.invisible').extract_first()
-        if markerB is not None and len(markerB.split('st.markerb="')) >= 2:
-            markerB = markerB.split('st.markerb="')[1].split('"')[0] if self.page != 1 else ''
+        markerB = response.css('span.invisible').xpath('@st.markerb').extract_first() if self.page != 1 else ''
+        if markerB is not None:
             print(f'Page: {self.page} {markerB}')
         else:
             print(f'Page: {self.page} END!!!')
@@ -31,13 +30,13 @@ class OkruSpider(scrapy.Spider):
         }
         body = {'st.markerB': markerB,
                 'fetch': 'false',
-                'st.page': str(self.page)}
+                'st.page': str(self.page if self.page != 1 else 2)}
 
         self.page += 1
 
         request = scrapy.FormRequest(
             url,
-            callback=self.parse_api,
+            callback=self.parse_posts,
             headers=headers,
             formdata=body,
             method='POST'
@@ -93,13 +92,13 @@ class OkruSpider(scrapy.Spider):
         yield group_profile
 
         # Posts
-
-        yield self.construct_request(group_id, response)
         yield self.construct_request(group_id, response)
 
-    def parse_api(self, response, group_id):
+
+    def parse_posts(self, response, group_id):
         posts = response.css('.feed.js-video-scope.h-mod')
-        if posts == None:
+        if posts == []:
+            # print('No posts')
             return
         group_post = GroupPostItem()
         for post in posts:
@@ -118,7 +117,6 @@ class OkruSpider(scrapy.Spider):
             group_post['comments_count'] = reactions_count[0]  # if ln > 0 else 0
             group_post['likes_count'] = reactions_count[2]  # if ln > 2 else 0
             yield group_post
-        if self.page != 2:
-            self.construct_request(group_id, response)
 
+        yield self.construct_request(group_id, response)
     # AltGroupMainFeedsNewRB
