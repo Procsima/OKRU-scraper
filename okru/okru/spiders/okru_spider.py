@@ -11,6 +11,8 @@ class OkruSpider(scrapy.Spider):
         'https://ok.ru/group/56522708811814']  # , 'https://ok.ru/group/56522708811814', 'https://ok.ru/oklive']
 
     page = 1
+    group_profile = GroupProfileItem()
+    _posts_count = 0
 
     def construct_request(self, group_id, response):
         url = f'https://ok.ru/{group_id}?cmd=AltGroupMainFeedsNewRB&gwt.requested=99041577T1677662206216&st.cmd' \
@@ -48,7 +50,7 @@ class OkruSpider(scrapy.Spider):
 
     def parse(self, response, **kwargs):
         # Group profile
-        group_profile = GroupProfileItem()
+
         group_name = response.css('.group-name_h::text').extract_first()
         group_id = int(response.css('.ellip-i').css('div').xpath('@data-url').extract_first().split('groupId=')[1])
         description_text = response.css('.group-info_desc::text').extract()
@@ -80,42 +82,43 @@ class OkruSpider(scrapy.Spider):
         if place == '':
             place += '-'
 
-        group_profile['item_type'] = "GroupProfile"
-        group_profile['group_name'] = group_name
-        group_profile['description'] = description
-        group_profile['members_count'] = members_count
-        group_profile['posts_count'] = posts_count
-        group_profile['place'] = place
-        group_profile['group_id'] = group_id
+        self.group_profile['item_type'] = "GroupProfile"
+        self.group_profile['group_name'] = group_name
+        self.group_profile['description'] = description
+        self.group_profile['members_count'] = members_count
+        self.group_profile['posts_count'] = posts_count
+        self.group_profile['place'] = place
+        self.group_profile['group_id'] = group_id
+        self.group_profile['url'] = f'https://ok.ru/group/{group_id}'
         # .u-menu_tx.ellip-i.lp response.css('span .invisible ::attr(st.markerB)').extract()
-
-        yield group_profile
 
         # Posts
         yield self.construct_request(group_id, response)
-
 
     def parse_posts(self, response, group_id):
         posts = response.css('.feed.js-video-scope.h-mod')
         if posts == []:
             # print('No posts')
+            self.group_profile['posts_count'] = self._posts_count
+            yield self.group_profile
             return
         group_post = GroupPostItem()
         for post in posts:
-            url = post.css('a.media-text_a').xpath('@href').extract_first()
+            self._posts_count += 1
+            url = 'https://ok.ru' + post.css('a.media-text_a').xpath('@href').extract_first()
             publication_date = post.css('.feed_date::text').extract_first()
-            text = post.css('.media-text-token::text').extract() + post.css('.media-text_cnt_tx::text').extract()
-            user_id = post.css('.group-link.o').extract()
-            reactions_count = [int(x) for x in post.css(".js-count::text").extract()]
+            text = '\n'.join(post.css('.media-text-token::text').extract() + post.css('.media-text_cnt_tx::text').extract())
+            user_id = post.css('.feed_ava_img').xpath('@alt').extract_first()
+            reactions_count = post.css(".js-count::text").extract()
             ln = len(reactions_count)
 
             group_post['item_type'] = 'GroupPost'
             group_post['url'] = url
             group_post['text'] = text
             group_post['publication_date'] = publication_date
-            # group_post['user_id'] = group_id
-            group_post['comments_count'] = reactions_count[0]  # if ln > 0 else 0
-            group_post['likes_count'] = reactions_count[2]  # if ln > 2 else 0
+            group_post['user_id'] = user_id
+            group_post['comments_count'] = int("".join(reactions_count[0].split('\xa0')))# if ln > 0 else 0
+            group_post['likes_count'] = int("".join(reactions_count[2].split('\xa0')))  # if ln > 2 else 0
             yield group_post
 
         yield self.construct_request(group_id, response)
