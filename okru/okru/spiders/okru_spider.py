@@ -3,12 +3,13 @@ import json
 import requests
 from ..items import GroupPostItem
 from ..items import GroupProfileItem
+import dateparser
 
 
 class OkruSpider(scrapy.Spider):
     name = 'okru'
     start_urls = [
-        'https://ok.ru/group/56522708811814']  # , 'https://ok.ru/group/56522708811814', 'https://ok.ru/oklive']
+        'https://ok.ru/oklive']  # , 'https://ok.ru/group/56522708811814', 'https://ok.ru/oklive', 'https://ok.ru/group/54425777012840']
 
     page = 1
     group_profile = GroupProfileItem()
@@ -52,7 +53,7 @@ class OkruSpider(scrapy.Spider):
         # Group profile
 
         group_name = response.css('.group-name_h::text').extract_first()
-        group_id = int(response.css('.ellip-i').css('div').xpath('@data-url').extract_first().split('groupId=')[1])
+        group_id = int(response.css('div.h-mod.sc-menu_w').xpath('@data-url').extract_first().split('groupId=')[1])
         description_text = response.css('.group-info_desc::text').extract()
         description_link = response.css('.group-info_desc a::text').extract()
         # description_list = []
@@ -105,7 +106,8 @@ class OkruSpider(scrapy.Spider):
         group_post = GroupPostItem()
         for post in posts:
             self._posts_count += 1
-            url = 'https://ok.ru' + post.css('a.media-text_a').xpath('@href').extract_first()
+            url = f"https://ok.ru{post.css('a.media-text_a').xpath('@href').extract_first()}"
+
             publication_date = post.css('.feed_date::text').extract_first()
             text = '\n'.join(post.css('.media-text-token::text').extract() + post.css('.media-text_cnt_tx::text').extract())
             user_id = post.css('.feed_ava_img').xpath('@alt').extract_first()
@@ -115,7 +117,7 @@ class OkruSpider(scrapy.Spider):
             group_post['item_type'] = 'GroupPost'
             group_post['url'] = url
             group_post['text'] = text
-            group_post['publication_date'] = publication_date
+            group_post['publication_date'] = str(dateparser.parse(publication_date))
             group_post['user_id'] = user_id
             group_post['comments_count'] = int("".join(reactions_count[0].split('\xa0')))# if ln > 0 else 0
             group_post['likes_count'] = int("".join(reactions_count[2].split('\xa0')))  # if ln > 2 else 0
@@ -123,3 +125,4 @@ class OkruSpider(scrapy.Spider):
 
         yield self.construct_request(group_id, response)
     # AltGroupMainFeedsNewRB
+    # mctc_navMenuSec response.css('div.h-mod.sc-menu_w').extract_first()
